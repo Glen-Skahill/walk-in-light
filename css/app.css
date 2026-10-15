@@ -154,8 +154,8 @@ p { margin: 0 0 10px; }
 .btnrow { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 
 /* ───── inputs ───── */
-input[type=text], textarea, select { width: 100%; background: var(--surface-2); border: 1px solid var(--line-strong); color: var(--text); padding: 10px 12px; min-height: var(--tap); font-size: 1rem; border-radius: 10px; outline: none; -webkit-appearance: none; }
-input[type=text]:focus, textarea:focus, select:focus { border-color: var(--blue-2); box-shadow: 0 0 0 3px rgba(59,130,246,0.3); }
+input[type=text], input[type=password], textarea, select { width: 100%; background: var(--surface-2); border: 1px solid var(--line-strong); color: var(--text); padding: 10px 12px; min-height: var(--tap); font-size: 1rem; border-radius: 10px; outline: none; -webkit-appearance: none; }
+input[type=text]:focus, input[type=password]:focus, textarea:focus, select:focus { border-color: var(--blue-2); box-shadow: 0 0 0 3px rgba(59,130,246,0.3); }
 textarea { min-height: 96px; resize: vertical; line-height: 1.45; }
 select { background-image: linear-gradient(45deg, transparent 50%, var(--text-2) 50%), linear-gradient(135deg, var(--text-2) 50%, transparent 50%); background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%; background-size: 5px 5px; background-repeat: no-repeat; padding-right: 32px; }
 label.lbl { display: block; font-size: 0.78rem; font-weight: 600; color: var(--text-2); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.08em; }

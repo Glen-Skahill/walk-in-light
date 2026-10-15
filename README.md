@@ -47,6 +47,12 @@ Every task has a size (S 15 min, M 45, L 90+), a short "How", a list of **tiny s
 
 Edit `js/seed.js`, bump `version`, bump `CACHE` in `sw.js`, push. On the phone, **Settings → Merge latest content** adds the new steps and refreshes guides on steps you have not edited, keeping all progress.
 
+## Sync and daily briefs
+
+**Settings → Sync** saves your progress to one private GitHub repository (`data/state.json`) every few seconds after a change, and pulls a newer copy when the app opens. It needs an empty private repo (for example `walk-in-light-data`) and a fine-grained personal access token with *Contents: Read and write* on that repo only. The token is stored on the phone and is stripped from the uploaded file and from exports.
+
+With sync on, scheduled Claude sessions read that file and push a three-line brief to your phone: yesterday's completed steps, today's task, and a verse. The schedule lives in Claude's scheduled tasks, not in this repo.
+
 ## Reminders
 
 iPhone web apps cannot schedule their own notifications without a push server. **Settings → Add daily reminder** generates a repeating calendar event with an alert; or set a daily reminder in the iOS Reminders app. See `docs/QUESTIONS.md` for the options if you want real push notifications.

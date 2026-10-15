@@ -16,7 +16,7 @@
 
   function fresh() {
     return {
-      v: 2, seedVersion: SEED.version, created: today(),
+      v: 2, seedVersion: SEED.version, created: today(), updatedAt: new Date().toISOString(),
       pillars: JSON.parse(JSON.stringify(SEED.pillars)).map((p) => ({ ...p, milestones: p.milestones.map((m) => ({ ...m, tasks: m.tasks.map(seedTask) })) })),
       items: JSON.parse(JSON.stringify(SEED.items)),
       bible: JSON.parse(JSON.stringify(SEED.bible)),
@@ -31,11 +31,12 @@
   }
   function migrate(s) {
     if (!s.settings) s.settings = { glow: 'on', fs: 17 };
+    if (!s.updatedAt) s.updatedAt = '1970-01-01T00:00:00.000Z'; // unknown age: a synced copy wins
     if (s.settings.fs && s.settings.fs >= 20) s.settings.fs = 17; // old pixel-font sizes
     s.pillars.forEach((p) => p.milestones.forEach((m) => m.tasks.forEach((t) => { if (!t.steps) t.steps = []; if (!t.checks) t.checks = []; })));
     return s;
   }
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('Save failed. Storage may be full.'); } }
+  function save(local) { if (!local) S.updatedAt = new Date().toISOString(); try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('Save failed. Storage may be full.'); } if (!local) syncSchedule(); }
   function commit() { save(); render(); }
 
   /* Merge a newer seed: add missing content, drop retired seeded tasks that were never touched,
@@ -286,6 +287,12 @@
       <p class="small mt">iPhone web apps cannot schedule notifications without a server, so the reminder lives in the Calendar app as a daily event with an alert.</p>
       <div class="row"><label class="sr" for="wake">Time</label><input type="text" name="wake" id="wake" value="${esc(S.settings.wake || '19:00')}" placeholder="19:00" style="width:110px" inputmode="numeric"><button class="btn primary" data-action="ics">Add to Calendar</button></div>
       <p class="caption mt">Or in the Reminders app: New Reminder, "Walk in Light: one small step", repeat daily.</p>
+      <hr class="sep"><h3>Sync for daily briefs</h3>
+      <p class="small mt">Saves your progress to one private GitHub repository so the scheduled briefs can read it. Create the repo (for example <b>walk-in-light-data</b>, private, empty), then a fine-grained personal access token with <b>Contents: Read and write</b> on that repo only. The token stays on this phone.</p>
+      <label class="lbl" for="sync-repo">Repository (owner/name)</label><input type="text" id="sync-repo" value="${esc((S.settings.sync && S.settings.sync.repo) || '')}" placeholder="Glen-Skahill/walk-in-light-data" autocapitalize="off" autocomplete="off">
+      <label class="lbl" for="sync-token">Token</label><input type="password" id="sync-token" value="${esc((S.settings.sync && S.settings.sync.token) || '')}" placeholder="github_pat_…" autocomplete="off">
+      <div class="btnrow"><button class="btn primary" data-action="sync-save">Save and sync now</button>${syncCfg() ? '<button class="btn ghost" data-action="sync-off">Turn off</button>' : ''}</div>
+      <p class="caption mt" id="sync-status">${esc(SYNC.status || (syncCfg() ? 'Configured' : 'Not configured'))}</p>
       <hr class="sep"><h3>Backup</h3>
       <div class="btnrow"><button class="btn primary" data-action="export">${canShare ? 'Export (share)' : 'Export JSON'}</button><label class="btn"><input type="file" accept="application/json,.json" data-action="import" style="display:none">Import JSON</label></div>
       <p class="caption mt">Export monthly into Drive. Import replaces everything on this phone with the file.</p>
@@ -314,13 +321,13 @@
   }
   let toastTimer; function toast(msg) { const el = $('#toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 2200); }
   function exportJson() {
-    const data = JSON.stringify(S, null, 1); const name = `walk-in-light-${today()}.json`;
+    const data = JSON.stringify(stripSecrets(S), null, 1); const name = `walk-in-light-${today()}.json`;
     const file = new File([data], name, { type: 'application/json' });
     if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: 'Walk in Light backup' }).catch(() => {}); return; }
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([data], { type: 'application/json' })); a.download = name; document.body.appendChild(a); a.click(); a.remove();
   }
   function importJson(file) {
-    const r = new FileReader(); r.onload = () => { try { const d = JSON.parse(r.result); if (!d.pillars) throw 0; S = migrate(d); commit(); closeSheet(); toast('Imported'); } catch (e) { toast('Not a Walk in Light file'); } }; r.readAsText(file);
+    const r = new FileReader(); r.onload = () => { try { const d = JSON.parse(r.result); if (!d.pillars) throw 0; const keep = S.settings.sync; S = migrate(d); S.settings.sync = keep; commit(); closeSheet(); toast('Imported'); } catch (e) { toast('Not a Walk in Light file'); } }; r.readAsText(file);
   }
   function ics() {
     const hhmm = ($('#wake').value || '19:00').replace(/[^0-9]/g, '').padStart(4, '0').slice(0, 4); S.settings.wake = hhmm.slice(0, 2) + ':' + hhmm.slice(2); save();
@@ -331,6 +338,51 @@
     if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: 'Walk in Light reminder' }).catch(() => {}); return; }
     const a = document.createElement('a'); a.href = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(body); a.download = 'walk-in-light-reminder.ics'; document.body.appendChild(a); a.click(); a.remove();
   }
+
+
+  /* ───────────── sync (GitHub contents API, fine-grained token, one private repo) ─────────────
+     Lets scheduled daily briefs read your progress. The token never leaves this phone:
+     it is stripped from the uploaded file and from exports. */
+  const SYNC = { timer: null, sha: null, busy: false, status: '' };
+  const syncCfg = () => { const c = S.settings.sync; return c && c.token && c.repo ? c : null; };
+  const ghHeaders = (c) => ({ Authorization: 'Bearer ' + c.token, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' });
+  const ghUrl = (c) => `https://api.github.com/repos/${c.repo}/contents/${c.path || 'data/state.json'}`;
+  function stripSecrets(state) { const copy = JSON.parse(JSON.stringify(state)); if (copy.settings) delete copy.settings.sync; return copy; }
+  function setSyncStatus(msg) { SYNC.status = msg; const el = $('#sync-status'); if (el) el.textContent = msg; }
+  function syncSchedule() { if (!syncCfg()) return; clearTimeout(SYNC.timer); SYNC.timer = setTimeout(syncPush, 3000); }
+  async function syncGetSha(c) {
+    const r = await fetch(ghUrl(c) + '?ref=' + (c.branch || 'main'), { headers: ghHeaders(c), cache: 'no-store' });
+    if (r.status === 404) return null; if (!r.ok) throw new Error('GitHub ' + r.status); const j = await r.json(); return j;
+  }
+  async function syncPull() {
+    const c = syncCfg(); if (!c || !navigator.onLine) return;
+    try {
+      const j = await syncGetSha(c);
+      if (!j) { setSyncStatus('Connected. No file on GitHub yet; the next change creates it.'); syncSchedule(); return; }
+      SYNC.sha = j.sha;
+      const remote = JSON.parse(decodeURIComponent(escape(atob(j.content.replace(/\n/g, '')))));
+      if (remote.updatedAt && (!S.updatedAt || remote.updatedAt > S.updatedAt)) { const keep = S.settings.sync; S = migrate(remote); S.settings.sync = keep; save(true); render(); toast('Updated from GitHub'); }
+      setSyncStatus('Synced ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    } catch (e) { setSyncStatus('Sync read failed: ' + e.message); }
+  }
+  async function syncPush(retry) {
+    const c = syncCfg(); if (!c || SYNC.busy) { if (c) syncSchedule(); return; }
+    if (!navigator.onLine) { setSyncStatus('Offline. Will sync when back online.'); return; }
+    SYNC.busy = true; clearTimeout(SYNC.timer);
+    try {
+      if (SYNC.sha === null && !retry) { const j = await syncGetSha(c); SYNC.sha = j ? j.sha : undefined; }
+      const body = { message: 'Walk in Light progress ' + new Date().toISOString(), branch: c.branch || 'main', content: btoa(unescape(encodeURIComponent(JSON.stringify(stripSecrets(S), null, 1)))) };
+      if (SYNC.sha) body.sha = SYNC.sha;
+      const r = await fetch(ghUrl(c), { method: 'PUT', headers: { ...ghHeaders(c), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if ((r.status === 409 || r.status === 422) && !retry) { SYNC.busy = false; const j = await syncGetSha(c); SYNC.sha = j ? j.sha : undefined; return syncPush(true); }
+      if (!r.ok) throw new Error('GitHub ' + r.status + (r.status === 401 ? ' (bad token)' : r.status === 404 ? ' (repo not found or token lacks access)' : ''));
+      const j = await r.json(); SYNC.sha = j.content.sha;
+      setSyncStatus('Synced ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    } catch (e) { setSyncStatus('Sync failed: ' + e.message); }
+    SYNC.busy = false;
+  }
+  window.addEventListener('online', () => { syncPull(); });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncPull(); });
 
   document.addEventListener('click', (e) => {
     const el = e.target.closest('[data-action]'); if (!el) return; const a = el.dataset.action; const id = el.dataset.id;
@@ -366,6 +418,8 @@
       case 'merge': mergeSeed(); settingsSheet(); break;
       case 'reset': confirmTap(el, 'Tap again to erase everything', () => { S = fresh(); commit(); closeSheet(); }); break;
       case 'hide-install': S.settings.hideInstall = true; commit(); break;
+      case 'sync-save': { const repo = ($('#sync-repo').value || '').trim().replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, ''); const token = ($('#sync-token').value || '').trim(); if (!repo || !token) { toast('Repository and token are both needed'); break; } S.settings.sync = { repo, token, path: 'data/state.json', branch: 'main' }; SYNC.sha = null; save(true); setSyncStatus('Connecting…'); syncPull().then(() => syncPush()); break; }
+      case 'sync-off': delete S.settings.sync; SYNC.sha = null; save(true); settingsSheet(); toast('Sync turned off'); break;
       case 'close': closeSheet(); break;
     }
   });
@@ -401,4 +455,5 @@
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   render();
+  syncPull();
 })();
