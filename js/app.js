@@ -283,10 +283,17 @@
     openSheet(`<h3 class="c-blue">Settings</h3>
       <label class="lbl">Glow effects</label><div class="chips"><button class="chip ${S.settings.glow !== 'off' ? 'on' : ''}" data-action="set-glow" data-v="on">On</button><button class="chip ${S.settings.glow === 'off' ? 'on' : ''}" data-action="set-glow" data-v="off">Off</button></div>
       <label class="lbl">Text size</label><div class="chips">${[16, 17, 18, 20].map((n) => `<button class="chip ${S.settings.fs === n ? 'on' : ''}" data-action="set-fs" data-v="${n}">${n === 16 ? 'Small' : n === 17 ? 'Default' : n === 18 ? 'Large' : 'Larger'}</button>`).join('')}</div>
-      <hr class="sep"><h3>Daily reminder</h3>
-      <p class="small mt">iPhone web apps cannot schedule notifications without a server, so the reminder lives in the Calendar app as a daily event with an alert.</p>
-      <div class="row"><label class="sr" for="wake">Time</label><input type="text" name="wake" id="wake" value="${esc(S.settings.wake || '19:00')}" placeholder="19:00" style="width:110px" inputmode="numeric"><button class="btn primary" data-action="ics">Add to Calendar</button></div>
-      <p class="caption mt">Or in the Reminders app: New Reminder, "Walk in Light: one small step", repeat daily.</p>
+      <hr class="sep"><h3>Notifications from this app</h3>
+      ${(() => { const b = briefsCfg(); const on = !!(S.push && S.push.sub); const sup = pushSupported(); const inst = installed();
+        return `<p class="small mt">Three notifications at the times below: what you finished yesterday, today's task, and a verse. They are sent by a small workflow in your private data repo (free) and shown by this app. ${sup ? '' : 'This browser cannot receive push notifications. '}${!inst && /iPhone|iPad/.test(navigator.userAgent) ? 'Add the app to the Home Screen and open it from there to enable them. ' : ''}</p>
+        <div class="btnrow">${on ? `<span class="chip on" aria-label="Enabled">On for this phone</span><button class="btn ghost" data-action="push-off">Turn off</button>` : `<button class="btn primary" data-action="push-on">Enable on this phone</button>`}</div>
+        <label class="lbl" for="br-weekday">Weekdays</label><input type="time" id="br-weekday" value="${esc(b.weekday)}">
+        <label class="lbl" for="br-sat">Saturday</label><input type="time" id="br-sat" value="${esc(b.sat)}">
+        <label class="lbl" for="br-sun">Sunday</label><input type="time" id="br-sun" value="${esc(b.sun)}">
+        <label class="row mt" style="gap:10px"><input type="checkbox" id="br-on" ${b.enabled ? 'checked' : ''} style="width:22px;height:22px"> <span>Briefs on</span></label>
+        <p class="caption mt">Timezone: ${esc(localTz())} (from this phone). Changing a time needs Save again; the sender runs in GitHub's cloud and may be a few minutes late.</p>
+        <div class="btnrow"><button class="btn primary" data-action="briefs-save">Save schedule and install sender</button><button class="btn" data-action="briefs-test">Send a test now</button></div>
+        <p class="caption mt" id="briefs-status">${esc(B.status || (S.settings.briefs ? 'Schedule saved.' : 'Not set up yet.'))}</p>`; })()}
       <hr class="sep"><h3>Sync for daily briefs</h3>
       <p class="small mt">Saves your progress to one private GitHub repository so the scheduled briefs can read it. Create the repo (for example <b>walk-in-light-data</b>, private, empty), then a fine-grained personal access token with <b>Contents: Read and write</b> on that repo only. The token stays on this phone.</p>
       <label class="lbl" for="sync-repo">Repository (owner/name)</label><input type="text" id="sync-repo" value="${esc((S.settings.sync && S.settings.sync.repo) || '')}" placeholder="Glen-Skahill/walk-in-light-data" autocapitalize="off" autocomplete="off">
@@ -321,22 +328,13 @@
   }
   let toastTimer; function toast(msg) { const el = $('#toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 2200); }
   function exportJson() {
-    const data = JSON.stringify(stripSecrets(S), null, 1); const name = `walk-in-light-${today()}.json`;
+    const data = JSON.stringify(stripSecrets(S, true), null, 1); const name = `walk-in-light-${today()}.json`;
     const file = new File([data], name, { type: 'application/json' });
     if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: 'Walk in Light backup' }).catch(() => {}); return; }
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([data], { type: 'application/json' })); a.download = name; document.body.appendChild(a); a.click(); a.remove();
   }
   function importJson(file) {
     const r = new FileReader(); r.onload = () => { try { const d = JSON.parse(r.result); if (!d.pillars) throw 0; const keep = S.settings.sync; S = migrate(d); S.settings.sync = keep; commit(); closeSheet(); toast('Imported'); } catch (e) { toast('Not a Walk in Light file'); } }; r.readAsText(file);
-  }
-  function ics() {
-    const hhmm = ($('#wake').value || '19:00').replace(/[^0-9]/g, '').padStart(4, '0').slice(0, 4); S.settings.wake = hhmm.slice(0, 2) + ':' + hhmm.slice(2); save();
-    const d = new Date(); const stamp = d.toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z'; const start = d.toISOString().slice(0, 10).replace(/-/g, '') + 'T' + hhmm + '00';
-    const url = location.href.split('#')[0];
-    const body = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Walk in Light//EN', 'BEGIN:VEVENT', `UID:wil-daily-${Date.now()}@walkinlight`, `DTSTAMP:${stamp}`, `DTSTART:${start}`, 'DURATION:PT15M', 'RRULE:FREQ=DAILY', 'SUMMARY:Walk in Light: one small step', `DESCRIPTION:Open the console and do one small step. ${url}`, `URL:${url}`, 'BEGIN:VALARM', 'ACTION:DISPLAY', 'TRIGGER:PT0M', 'DESCRIPTION:Walk in Light', 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
-    const file = new File([body], 'walk-in-light-reminder.ics', { type: 'text/calendar' });
-    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: 'Walk in Light reminder' }).catch(() => {}); return; }
-    const a = document.createElement('a'); a.href = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(body); a.download = 'walk-in-light-reminder.ics'; document.body.appendChild(a); a.click(); a.remove();
   }
 
 
@@ -347,7 +345,7 @@
   const syncCfg = () => { const c = S.settings.sync; return c && c.token && c.repo ? c : null; };
   const ghHeaders = (c) => ({ Authorization: 'Bearer ' + c.token, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' });
   const ghUrl = (c) => `https://api.github.com/repos/${c.repo}/contents/${c.path || 'data/state.json'}`;
-  function stripSecrets(state) { const copy = JSON.parse(JSON.stringify(state)); if (copy.settings) delete copy.settings.sync; return copy; }
+  function stripSecrets(state, forExport) { const copy = JSON.parse(JSON.stringify(state)); if (copy.settings) delete copy.settings.sync; if (forExport) delete copy.push; return copy; }
   function setSyncStatus(msg) { SYNC.status = msg; const el = $('#sync-status'); if (el) el.textContent = msg; }
   function syncSchedule() { if (!syncCfg()) return; clearTimeout(SYNC.timer); SYNC.timer = setTimeout(syncPush, 3000); }
   async function syncGetSha(c) {
@@ -384,6 +382,104 @@
   window.addEventListener('online', () => { syncPull(); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncPull(); });
 
+  /* ───────────── notifications from this app (web push via a GitHub Actions workflow in the data repo) ───────────── */
+  const B = { status: '' };
+  const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const b64urlToBytes = (s) => { const pad = '='.repeat((4 - s.length % 4) % 4); const raw = atob((s + pad).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(raw, (c) => c.charCodeAt(0)); };
+  const installed = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  const briefsCfg = () => Object.assign({ enabled: true, weekday: '17:05', sat: '10:00', sun: '14:05' }, S.settings.briefs || {});
+  const localTz = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (e) { return 'UTC'; } };
+  function setBStatus(msg) { B.status = msg; const el = $('#briefs-status'); if (el) el.textContent = msg; }
+  async function vapidKeys() {
+    const kp = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+    const pub = b64url(await crypto.subtle.exportKey('raw', kp.publicKey));
+    const jwk = await crypto.subtle.exportKey('jwk', kp.privateKey);
+    return { pub, priv: jwk.d };
+  }
+  async function enablePush() {
+    if (!pushSupported()) { setBStatus('This browser cannot receive push. On iPhone, add the app to the Home Screen (iOS 16.4 or newer) and open it from there.'); return; }
+    if (!installed() && /iPhone|iPad/.test(navigator.userAgent)) { setBStatus('Open the app from the Home Screen icon first; Safari tabs cannot receive notifications.'); return; }
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { setBStatus('Permission was not granted. Allow notifications for Walk in Light in iPhone Settings.'); return; }
+      const reg = await navigator.serviceWorker.ready;
+      if (!S.push || !S.push.pub || !S.push.priv) { const k = await vapidKeys(); S.push = { pub: k.pub, priv: k.priv }; }
+      let sub = await reg.pushManager.getSubscription();
+      if (sub) { const have = b64url(sub.options.applicationServerKey || new ArrayBuffer(0)); if (have !== S.push.pub) { await sub.unsubscribe(); sub = null; } }
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64urlToBytes(S.push.pub) });
+      S.push.sub = sub.toJSON(); S.push.enabledAt = new Date().toISOString();
+      S.settings.tz = localTz(); S.settings.appUrl = location.href.split('#')[0];
+      save(); setBStatus('Notifications are on for this phone.' + (syncCfg() ? ' Syncing…' : ' Set up Sync above so the sender can reach you.'));
+      if (syncCfg()) { clearTimeout(SYNC.timer); await syncPush(); setBStatus('Notifications are on for this phone and synced.'); }
+      settingsSheet();
+    } catch (e) { setBStatus('Could not enable: ' + e.message); }
+  }
+  async function disablePush() {
+    try { const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription(); if (sub) await sub.unsubscribe(); } catch (e) {}
+    if (S.push) delete S.push.sub; save(); settingsSheet(); toast('Notifications off on this phone');
+  }
+  async function checkPushSubscription() {
+    if (!pushSupported() || !S.push || !S.push.sub) return;
+    try { const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription(); const j = sub && sub.toJSON();
+      if (!j) { delete S.push.sub; save(); } else if (j.endpoint !== S.push.sub.endpoint) { S.push.sub = j; save(); } } catch (e) {}
+  }
+  function tzOffsetMinutes(tz, date) {
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: tz, hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(date).map((x) => [x.type, x.value]));
+    return Math.round((Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second) - date.getTime()) / 60000);
+  }
+  /* GitHub cron is UTC only, so emit one line per possible offset (standard and daylight time); the sender checks local time. */
+  function cronLines(sched, tz) {
+    const y = new Date().getUTCFullYear();
+    const offs = [...new Set([tzOffsetMinutes(tz, new Date(Date.UTC(y, 0, 1, 12))), tzOffsetMinutes(tz, new Date(Date.UTC(y, 6, 1, 12)))])];
+    const rules = [[sched.weekday, [1, 2, 3, 4, 5]], [sched.sat, [6]], [sched.sun, [0]]];
+    const map = {};
+    rules.forEach(([hhmm, dows]) => {
+      if (!hhmm || !/^\d{1,2}:\d{2}$/.test(hhmm)) return; const [h, m] = hhmm.split(':').map(Number);
+      dows.forEach((d) => offs.forEach((off) => { let t = h * 60 + m - off; let dd = d; while (t < 0) { t += 1440; dd = (dd + 6) % 7; } while (t >= 1440) { t -= 1440; dd = (dd + 1) % 7; } const key = `${t % 60} ${Math.floor(t / 60)}`; (map[key] = map[key] || new Set()).add(dd); }));
+    });
+    return Object.entries(map).map(([k, ds]) => `${k} * * ${[...ds].sort().join(',')}`);
+  }
+  function workflowYaml(sched, tz) {
+    const lines = cronLines(sched, tz);
+    return `# Generated by Walk in Light (Settings → Notifications). Sends the daily briefs as web push notifications.\n# Times are your local schedule (${tz}) converted to UTC for both standard and daylight time; the script checks local time before sending.\nname: Walk in Light briefs\non:\n  schedule:\n${lines.map((l) => `    - cron: '${l}'`).join('\n')}\n  workflow_dispatch:\npermissions:\n  contents: read\nconcurrency: walk-in-light-briefs\njobs:\n  send:\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n        with:\n          node-version: 20\n      - run: npm install --no-save --silent web-push@3.6.7\n      - run: node briefs/send-briefs.mjs\n        env:\n          FORCE: \${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}\n`;
+  }
+  async function ghPutFile(c, path, content, message) {
+    const url = `https://api.github.com/repos/${c.repo}/contents/${path}`;
+    let sha; const g = await fetch(url + '?ref=' + (c.branch || 'main'), { headers: ghHeaders(c), cache: 'no-store' });
+    if (g.ok) { const j = await g.json(); sha = j.sha; const current = decodeURIComponent(escape(atob(j.content.replace(/\n/g, '')))); if (current === content) return 'unchanged'; }
+    else if (g.status !== 404) throw new Error('GitHub ' + g.status);
+    const body = { message, branch: c.branch || 'main', content: btoa(unescape(encodeURIComponent(content))) }; if (sha) body.sha = sha;
+    const r = await fetch(url, { method: 'PUT', headers: { ...ghHeaders(c), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!r.ok) { const t = await r.text(); throw new Error('GitHub ' + r.status + (r.status === 404 && /workflow/i.test(path) ? ' (the token needs Workflows: Read and write)' : '') + (/workflow/.test(t) ? ' ' + t.slice(0, 160) : '')); }
+    return 'written';
+  }
+  async function saveSchedule() {
+    const sched = { enabled: $('#br-on').checked, weekday: $('#br-weekday').value, sat: $('#br-sat').value, sun: $('#br-sun').value };
+    S.settings.briefs = sched; S.settings.tz = localTz(); S.settings.appUrl = location.href.split('#')[0]; save();
+    const c = syncCfg(); if (!c) { setBStatus('Schedule saved on this phone. Set up Sync above, then save again to install the sender.'); return; }
+    setBStatus('Installing the sender in ' + c.repo + '…');
+    try {
+      const script = await (await fetch('briefs/send-briefs.mjs', { cache: 'no-store' })).text();
+      const a = await ghPutFile(c, 'briefs/send-briefs.mjs', script, 'Walk in Light: brief sender');
+      const b = await ghPutFile(c, '.github/workflows/walk-in-light-briefs.yml', workflowYaml(sched, S.settings.tz), 'Walk in Light: brief schedule');
+      clearTimeout(SYNC.timer); await syncPush();
+      setBStatus(`Sender ${a === 'written' || b === 'written' ? 'installed' : 'up to date'} in ${c.repo}. Schedule: weekdays ${sched.weekday}, Sat ${sched.sat}, Sun ${sched.sun} (${S.settings.tz})${S.push && S.push.sub ? '.' : '. Now enable notifications on this phone.'}`);
+    } catch (e) { setBStatus('Install failed: ' + e.message); }
+  }
+  async function sendTest() {
+    const c = syncCfg(); if (!c) { setBStatus('Set up Sync first.'); return; }
+    if (!S.push || !S.push.sub) { setBStatus('Enable notifications on this phone first.'); return; }
+    setBStatus('Asking GitHub to run the sender…');
+    try {
+      clearTimeout(SYNC.timer); await syncPush();
+      const r = await fetch(`https://api.github.com/repos/${c.repo}/actions/workflows/walk-in-light-briefs.yml/dispatches`, { method: 'POST', headers: { ...ghHeaders(c), 'Content-Type': 'application/json' }, body: JSON.stringify({ ref: c.branch || 'main' }) });
+      if (r.status === 204) setBStatus('Test requested. Three notifications should arrive within about a minute. If not, check the Actions tab of ' + c.repo + '.');
+      else if (r.status === 404) setBStatus('Could not start the test: install the sender first (Save schedule), or give the token Actions: Read and write. You can also press "Run workflow" in the repo\'s Actions tab.');
+      else setBStatus('GitHub answered ' + r.status + '. Try "Run workflow" in the repo\'s Actions tab.');
+    } catch (e) { setBStatus('Test failed: ' + e.message); }
+  }
+
   document.addEventListener('click', (e) => {
     const el = e.target.closest('[data-action]'); if (!el) return; const a = el.dataset.action; const id = el.dataset.id;
     if (el.tagName === 'SELECT' || el.tagName === 'INPUT' || el.tagName === 'FORM') return;
@@ -414,7 +510,10 @@
       case 'set-glow': S.settings.glow = el.dataset.v; commit(); settingsSheet(); break;
       case 'set-fs': S.settings.fs = +el.dataset.v; commit(); settingsSheet(); break;
       case 'export': exportJson(); break;
-      case 'ics': ics(); break;
+      case 'push-on': enablePush(); break;
+      case 'push-off': disablePush(); break;
+      case 'briefs-save': saveSchedule(); break;
+      case 'briefs-test': sendTest(); break;
       case 'merge': mergeSeed(); settingsSheet(); break;
       case 'reset': confirmTap(el, 'Tap again to erase everything', () => { S = fresh(); commit(); closeSheet(); }); break;
       case 'hide-install': S.settings.hideInstall = true; commit(); break;
@@ -456,4 +555,6 @@
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   render();
   syncPull();
+  checkPushSubscription();
+  window.WIL_DEBUG = { cronLines, workflowYaml };
 })();

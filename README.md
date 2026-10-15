@@ -47,15 +47,18 @@ Every task has a size (S 15 min, M 45, L 90+), a short "How", a list of **tiny s
 
 Edit `js/seed.js`, bump `version`, bump `CACHE` in `sw.js`, push. On the phone, **Settings → Merge latest content** adds the new steps and refreshes guides on steps you have not edited, keeping all progress.
 
-## Sync and daily briefs
+## Sync and notifications
 
-**Settings → Sync** saves your progress to one private GitHub repository (`data/state.json`) every few seconds after a change, and pulls a newer copy when the app opens. It needs an empty private repo (for example `walk-in-light-data`) and a fine-grained personal access token with *Contents: Read and write* on that repo only. The token is stored on the phone and is stripped from the uploaded file and from exports.
+**Settings → Sync** saves your progress to one private GitHub repository (`data/state.json`) a few seconds after each change and pulls a newer copy when the app opens. It needs an empty private repo (for example `walk-in-light-data`) and a fine-grained personal access token with these permissions on that repo only: *Contents: Read and write*, *Workflows: Read and write*, *Actions: Read and write*. The token stays on the phone; it is stripped from the uploaded file and from exports.
 
-With sync on, scheduled Claude sessions read that file and push a three-line brief to your phone: yesterday's completed steps, today's task, and a verse. The schedule lives in Claude's scheduled tasks, not in this repo.
+**Settings → Notifications** makes the app send its own daily briefs: three push notifications (what you finished yesterday, today's task, a verse) at times you choose for weekdays, Saturday and Sunday. How it works, all free:
 
-## Reminders
+1. *Enable on this phone* asks for notification permission and subscribes this installed app to web push (iPhone needs iOS 16.4 or newer and the app opened from the Home Screen, not a Safari tab). The app generates its own signing keys.
+2. *Save schedule and install sender* writes two files into your data repo: `briefs/send-briefs.mjs` (the sender) and `.github/workflows/walk-in-light-briefs.yml` (a GitHub Actions schedule computed from your times and your phone's timezone, in both standard and daylight time).
+3. At each time, GitHub runs the sender for a few seconds. It reads `data/state.json`, checks that it is really the scheduled local time, composes the three lines and sends them through web push. Your service worker shows them. Nothing is written back.
+4. *Send a test now* runs the workflow immediately.
 
-iPhone web apps cannot schedule their own notifications without a push server. **Settings → Add daily reminder** generates a repeating calendar event with an alert; or set a daily reminder in the iOS Reminders app. See `docs/QUESTIONS.md` for the options if you want real push notifications.
+Keys, subscription and schedule live in `data/state.json`; that is why the data repo should be private. GitHub's scheduler can run a few minutes late, which the sender tolerates. If a notification ever stops arriving, open the app and tap *Enable on this phone* again.
 
 ## Local development
 

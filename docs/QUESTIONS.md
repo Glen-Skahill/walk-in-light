@@ -16,7 +16,7 @@ Answers to any of these change the content or the app. Reply in the session, or 
 8b. **Hardstyle.** Euphoric, raw, or both? Do you already own a DAW or headphones? Any producers you want the sound to sit next to? The Music pillar assumes zero gear and FL Studio as the eventual home.
 
 ## App
-9. **Reminders.** Right now: a calendar event with an alert, or an iOS Reminder. Real push notifications on an iPhone web app need a small push server (free tiers exist, e.g. a Cloudflare Worker, but it is a second thing to maintain). Want that, or is the calendar approach enough?
+9. **Notifications.** Done: the app sends its own three daily briefs through web push, using a GitHub Actions workflow in your private data repo as the free sender. Times are set in Settings → Notifications and follow the phone's timezone.
 10. **The "Studio" pillar.** It holds the one-time setup steps (channel, brand kit, tools, folders, recording corner). Keep it as its own tab, or fold it into Home?
 11. **Aesthetic.** Now: midnight blue, electric blue accent, gold reserved for the sacred, Inter and Rajdhani type, large touch targets, a glow toggle. Anything still in the way?
 12. **Repo visibility.** Pages on a private repo costs money; the code contains nothing personal, your data never leaves the phone. OK to keep public?

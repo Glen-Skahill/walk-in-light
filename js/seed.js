@@ -4,7 +4,7 @@
  * Task fields: title, size (S 15 min · M 45 · L 90+), guide (short how-to), steps (tiny checkable sub-steps).
  */
 window.WIL_SEED = {
-  version: 3,
+  version: 4,
 
   verses: [
     { ref: 'John 8:12', text: 'I am the light of the world: he that followeth me shall not walk in darkness, but shall have the light of life.' },
@@ -70,7 +70,7 @@ window.WIL_SEED = {
           { id: 'st-fo-2', size: 'S', title: 'Adopt the file naming rule', guide: '`YYYY-MM-DD_project_v01.ext`. Never "final". Versions go up; nothing is overwritten.', steps: ['Rename the three files you already have', 'Write the rule at the top of your Obsidian vault README'] },
           { id: 'st-fo-3', size: 'S', title: 'Turn on automatic photo/video upload from the phone', steps: ['Google Photos or iCloud Photos: backup on', 'Confirm one test video appears on the computer'] },
           { id: 'st-fo-4', size: 'S', title: 'Export this app once and store it in 99 Archive', steps: ['Settings → Export', 'Save to Files → Drive → Walk in Light/99 Archive', 'Repeat on the first of each month'] },
-          { id: 'st-fo-5', size: 'S', title: 'Turn on sync so the daily briefs know your progress', guide: 'The scheduled briefs read your progress from a private GitHub repository. Three small steps, once.', steps: ['On GitHub: New repository → name walk-in-light-data → Private → Create (no README)', 'GitHub → Settings → Developer settings → Personal access tokens → Fine-grained → Generate: repository access "Only select repositories" → walk-in-light-data; Permissions → Contents → Read and write; expiry 1 year', 'Copy the token; in this app open Settings → Sync, enter Glen-Skahill/walk-in-light-data and the token → Save and sync now', 'Install the Claude GitHub App on walk-in-light-data too (github.com/apps/claude) so the briefs can read it'] },
+          { id: 'st-fo-5', size: 'S', title: 'Turn on sync and the daily brief notifications', guide: 'The app sends its own notifications: a tiny GitHub Actions workflow in your private data repo reads your synced progress at your chosen times and pushes three notifications (Yesterday, Today, Verse) to this phone. Free. Four small steps, once.', steps: ['On GitHub: New repository → name walk-in-light-data → Private → Create (no README)', 'GitHub → Settings → Developer settings → Personal access tokens → Fine-grained → Generate: repository access "Only select repositories" → walk-in-light-data; Permissions: Contents → Read and write, Workflows → Read and write, Actions → Read and write; expiry 1 year', 'In this app (installed on the Home Screen): Settings → Sync, enter Glen-Skahill/walk-in-light-data and the token → Save and sync now', 'Settings → Notifications → Enable on this phone, set the times, then Save schedule and install sender → Send a test now'] },
         ]},
         { id: 'studio-corner', name: 'Recording corner', tasks: [
           { id: 'st-rc-1', size: 'S', title: 'Pick the spot: face a window, 1.5 m from the wall behind you', steps: ['Stand or sit there at the time of day you will record', 'Take a phone photo; check the face is lit, background has depth'] },
